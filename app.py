@@ -4,7 +4,7 @@ from json import loads
 
 import django
 from django.db.models import Q
-from flask import Flask, render_template, request, jsonify
+from flask import Flask, request, jsonify
 from flask_socketio import join_room, leave_room, send, SocketIO
 from queue import Queue
 
@@ -19,8 +19,6 @@ from sms.models import IncomingSMS, OutgoingSMS, CallRecord
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'secretdgdffghdgfhdgh'
 socketio = SocketIO(app)
-
-rooms = {}
 
 ROOM = "HTRT"
 device = DeviceConnectionStatus()
@@ -75,7 +73,7 @@ def message(data):
     print(f"data type:  {type(data)}")
 
     if isinstance(data, str):
-        data_dict = eval(data)
+        data_dict = loads(data)
     else:
         data_dict = data
     phone = data_dict.get("phone")
