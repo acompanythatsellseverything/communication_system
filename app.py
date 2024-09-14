@@ -231,6 +231,34 @@ def get_history():
     return jsonify(sms_history), 200
 
 
+@app.route("/get_call_history", methods=["POST"])
+def get_call_history():
+    data = request.json
+    call_history = []
+    for call in CallRecord.objects.filter(client_number=data.get("phone")):
+        call_history.append({
+            "pbx_call_id": call.pbx_call_id,
+            "call_id_with_rec": call.call_id_with_rec,
+            "caller_id": call.caller_id,
+            "caller_phone": call.caller_phone,
+            "client_number": call.client_number,
+            "operator_number": call.operator_number,
+            "call_start_time": call.call_start_time,
+            "call_end_time": call.call_end_time,
+            "destination_number": call.destination_number,
+            "call_type": call.call_type,
+            "duration": call.duration,
+            "status_code": call.status_code,
+            "is_recorder": call.is_recorder,
+            "disposition": call.disposition,
+            "caller_record_link": call.caller_record_link,
+            "events": call.events
+        })
+    call_history.sort(key=lambda call: call["call_start_time"])
+    for call in call_history:
+        call["call_start_time"] = call["call_start_time"].isoformat()
+        call["call_end_time"] = call["call_end_time"].isoformat()
+    return jsonify(call_history), 200
 
 
 @socketio.on("phone_connect")
