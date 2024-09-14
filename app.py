@@ -285,4 +285,4 @@ def phone_disconnect():
 
 
 if __name__ == '__main__':
-    socketio.run(app, debug=True)
+    socketio.run(app, host=os.getenv('APP_HOST'), port=os.getenv('APP_PORT'), debug=True, allow_unsafe_werkzeug=True)
