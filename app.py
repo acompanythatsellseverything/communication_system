@@ -18,7 +18,7 @@ from sms.models import IncomingSMS, OutgoingSMS, CallRecord
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'secretdgdffghdgfhdgh'
-socketio = SocketIO(app)
+socketio = SocketIO(app, logger=True, engineio_logger=True)
 
 ROOM = "HTRT"
 device = DeviceConnectionStatus()
@@ -67,7 +67,7 @@ def add_event(obj, event):
 #     return render_template("room.html", code=ROOM)
 
 
-@socketio.on("message")
+@socketio.on("message", namespace='/sms')
 def message(data):
     print(f"Raw data: {data}")
     print(f"data type:  {type(data)}")
@@ -261,21 +261,21 @@ def get_call_history():
     return jsonify(call_history), 200
 
 
-@socketio.on("phone_connect")
+@socketio.on("phone_connect", namespace='/sms')
 def phone_connect():
     print("connected_emit")
     device.connection = True
     join_room(ROOM)
-    send({"phone": "connect", "text": "has entered the room"}, to=ROOM)
+    send({"phone": "connect", "text": "has entered the room"}, to=ROOM, namespace='/sms')
     while not task_queue.empty():
         content = task_queue.get()
-        socketio.emit("message", content, to=ROOM)
+        socketio.emit("message", content, to=ROOM, namespace='/sms')
         OutgoingSMS.objects.create(**content)
         task_queue.task_done()
         print("Message sent from queue")
 
 
-@socketio.on("phone_disconnect")
+@socketio.on("phone_disconnect", namespace='/sms')
 def phone_disconnect():
     print("disconnected_emit")
 
