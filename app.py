@@ -39,7 +39,7 @@ def add_event(obj, event):
 
 @app.route('/', methods=['GET'])
 def home():
-    return jsonify({'task_queue': task_queue.qsize(), 'clients': rooms(ROOM)}), 200
+    return jsonify({'task_queue': task_queue.qsize(), 'clients': rooms(ROOM, namespace='/')}), 200
 #     session.clear()
 #     if request.method == 'POST':
 #         name = request.form.get("name")
