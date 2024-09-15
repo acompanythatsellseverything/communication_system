@@ -5,7 +5,7 @@ from json import loads
 import django
 from django.db.models import Q
 from flask import Flask, request, jsonify
-from flask_socketio import join_room, leave_room, send, SocketIO
+from flask_socketio import join_room, leave_room, send, SocketIO, rooms
 from queue import Queue
 
 from utils.device_connection_status import DeviceConnectionStatus
@@ -37,8 +37,9 @@ def add_event(obj, event):
             obj.events += "\n" + event
 
 
-# @app.route('/', methods=['GET', 'POST'])
-# def home():
+@app.route('/', methods=['GET'])
+def home():
+    return jsonify({'task_queue': task_queue.qsize(), 'clients': rooms(ROOM)}), 200
 #     session.clear()
 #     if request.method == 'POST':
 #         name = request.form.get("name")
