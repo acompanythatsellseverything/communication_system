@@ -90,7 +90,7 @@ async def broadcast(message):
 # REST API route for sending SMS messages
 @app.route("/send_message", methods=["POST"])
 async def send_message(request):
-    data = request.data
+    data = request.json
     text = data.get("text")
     phone = data.get("phone")
 
