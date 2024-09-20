@@ -116,7 +116,6 @@ async def webhook_handle(request):
     if zd_echo:
         return HTTPResponse(zd_echo)
     event = data.get("event")
-    print(event)
     call_start = data.get("call_start")
     pbx_call_id = data.get("pbx_call_id")
     destination_number = data.get("destination")
@@ -128,6 +127,7 @@ async def webhook_handle(request):
     duration = data.get("duration")
 
     if event in ["NOTIFY_OUT_START", "NOTIFY_START"]:
+        print(event)
         call_record, _ = await CallRecord.objects.aget_or_create(
             pbx_call_id=pbx_call_id)
         call_record.call_start_time = call_start
@@ -141,6 +141,7 @@ async def webhook_handle(request):
         await call_record.asave()
 
     elif event == "NOTIFY_INTERNAL":
+        print(event)
         call_record, _ = await CallRecord.objects.aget_or_create(
             pbx_call_id=pbx_call_id
         )
@@ -152,6 +153,7 @@ async def webhook_handle(request):
         await call_record.asave()
 
     elif event == "NOTIFY_ANSWER":
+        print(event)
         call_record, _ = await CallRecord.objects.aget_or_create(pbx_call_id=pbx_call_id)
         call_record.caller_id = data.get("caller_id")
         call_record.client_number = data.get("caller_id")
@@ -161,6 +163,7 @@ async def webhook_handle(request):
         await call_record.asave()
 
     elif event in ["NOTIFY_OUT_END", "NOTIFY_END"]:
+        print(event)
         call_record, _ = await CallRecord.objects.aget_or_create(pbx_call_id=pbx_call_id)
         call_record.duration = duration
         call_record.status_code = status_code
@@ -174,6 +177,7 @@ async def webhook_handle(request):
         await call_record.asave()
 
     elif event == "NOTIFY_RECORD":
+        print(event)
         zadarma_api = ZadarmaAPI(key=os.getenv("ZADARMA_KEY"), secret=os.getenv("ZADARMA_SECRET"))
         call = await sync_to_async(zadarma_api.call)('/v1/pbx/record/request/', {
             "pbx_call_id": pbx_call_id,
@@ -181,9 +185,10 @@ async def webhook_handle(request):
         })
 
         call_record, _ = await CallRecord.objects.aget_or_create(pbx_call_id=pbx_call_id)
-
+        print(loads(call)["links"][0])
         call_record.caller_record_link = loads(call)["links"][0]
         await add_event(call_record, event)
+        print(call_record)
         await call_record.asave()
 
     return json({})
