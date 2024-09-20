@@ -5,3 +5,5 @@ templates
 data
 static
 .env
+__pycache__
+

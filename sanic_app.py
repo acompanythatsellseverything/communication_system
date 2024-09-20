@@ -3,8 +3,10 @@ import asyncio
 from datetime import datetime
 from json import dumps, loads
 from queue import Queue
+from asgiref.sync import sync_to_async
+from dotenv import load_dotenv
 
-from sanic import Sanic
+from sanic import Sanic, HTTPResponse
 from sanic.response import json
 from sanic.log import logger
 from django.db.models import Q
@@ -21,6 +23,8 @@ app = Sanic("WebSocketApp")
 clients = set()
 task_queue = Queue()
 
+load_dotenv(".env")
+
 
 def phone_normalize(phone_number):
     return phone_number.replace('-', '').replace('(', '').replace(')', '').replace(' ', '')
@@ -32,7 +36,7 @@ async def add_event(obj, event):
             obj.events = event
         else:
             obj.events += "\n" + event
-    await obj.save()
+    await obj.asave()
 
 
 # WebSocket Route
@@ -104,13 +108,13 @@ async def send_message(request):
 
 
 # Webhook handler example
-@app.route("/webhook", methods=["POST"])
+@app.route("/webhook", methods=["POST", "GET"])
 async def webhook_handle(request):
     data = request.form
     print(request.form, "form")
     zd_echo = request.args.get('zd_echo')
     if zd_echo:
-        return zd_echo
+        return HTTPResponse(zd_echo)
     event = data.get("event")
     print(event)
     call_start = data.get("call_start")
@@ -124,7 +128,7 @@ async def webhook_handle(request):
     duration = data.get("duration")
 
     if event in ["NOTIFY_OUT_START", "NOTIFY_START"]:
-        call_record, _ = CallRecord.objects.get_or_create(
+        call_record, _ = await CallRecord.objects.aget_or_create(
             pbx_call_id=pbx_call_id)
         call_record.call_start_time = call_start
         call_record.caller_phone = data.get("caller_id")
@@ -134,10 +138,10 @@ async def webhook_handle(request):
         call_record.destination_number = destination_number
         call_record.call_type = call_type
         await add_event(call_record, event)
-        call_record.save()
+        await call_record.asave()
 
     elif event == "NOTIFY_INTERNAL":
-        call_record, _ = CallRecord.objects.get_or_create(
+        call_record, _ = await CallRecord.objects.aget_or_create(
             pbx_call_id=pbx_call_id
         )
         call_record.call_start = call_start
@@ -145,19 +149,19 @@ async def webhook_handle(request):
         call_record.client_number = data.get("called_id")
         call_record.operator_number = data.get("caller_did")
         await add_event(call_record, event)
-        call_record.save()
+        await call_record.asave()
 
     elif event == "NOTIFY_ANSWER":
-        call_record, _ = (CallRecord.objects.get_or_create(pbx_call_id=pbx_call_id))
+        call_record, _ = await CallRecord.objects.aget_or_create(pbx_call_id=pbx_call_id)
         call_record.caller_id = data.get("caller_id")
         call_record.client_number = data.get("caller_id")
         call_record.operator_number = destination_number
         call_record.call_type = call_type
         await add_event(call_record, event)
-        call_record.save()
+        await call_record.asave()
 
     elif event in ["NOTIFY_OUT_END", "NOTIFY_END"]:
-        call_record, _ = CallRecord.objects.get_or_create(pbx_call_id=pbx_call_id)
+        call_record, _ = await CallRecord.objects.aget_or_create(pbx_call_id=pbx_call_id)
         call_record.duration = duration
         call_record.status_code = status_code
         call_record.is_recorded = is_recorded
@@ -167,20 +171,20 @@ async def webhook_handle(request):
         call_record.operator_number = data.get("called_did")
         call_record.call_end_time = datetime.now()
         await add_event(call_record, event)
-        call_record.save()
+        await call_record.asave()
 
     elif event == "NOTIFY_RECORD":
         zadarma_api = ZadarmaAPI(key=os.getenv("ZADARMA_KEY"), secret=os.getenv("ZADARMA_SECRET"))
-        call = zadarma_api.call('/v1/pbx/record/request/', {
+        call = await sync_to_async(zadarma_api.call)('/v1/pbx/record/request/', {
             "pbx_call_id": pbx_call_id,
             "lifetime": 5184000
         })
 
-        call_record, _ = CallRecord.objects.get_or_create(pbx_call_id=pbx_call_id)
+        call_record, _ = await CallRecord.objects.aget_or_create(pbx_call_id=pbx_call_id)
 
         call_record.caller_record_link = loads(call)["links"][0]
         await add_event(call_record, event)
-        call_record.save()
+        await call_record.asave()
 
     return json({})
 
@@ -196,8 +200,8 @@ async def get_history(request):
     if start_date and end_date:
         filter &= Q(created_date__range=(start_date, end_date))
 
-    incoming_sms = await IncomingSMS.objects.filter(filter).values()
-    outgoing_sms = await OutgoingSMS.objects.filter(filter).values()
+    incoming_sms = await IncomingSMS.objects.afilter(filter).values()
+    outgoing_sms = await OutgoingSMS.objects.afilter(filter).values()
 
     sms_history = incoming_sms + outgoing_sms
     sms_history.sort(key=lambda sms: sms["created_date"])
@@ -226,4 +230,4 @@ if __name__ == '__main__':
     app.add_task(send_queued_messages)
 
     # Run the Sanic server with WebSocket support
-    app.run(host="0.0.0.0", port=5092)
+    app.run(host=os.getenv("CS_HOST"), port=int(os.getenv("CS_PORT")))
