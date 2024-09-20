@@ -1,5 +1,6 @@
 import os
 import asyncio
+from datetime import datetime
 from json import dumps, loads
 from queue import Queue
 
@@ -8,6 +9,8 @@ from sanic.response import json
 from sanic.log import logger
 from django.db.models import Q
 import django
+
+from utils.Zadarma_api import ZadarmaAPI
 
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'AndroidJavaWebsocket.settings')
 django.setup()
@@ -104,16 +107,80 @@ async def send_message(request):
 @app.route("/webhook", methods=["POST"])
 async def webhook_handle(request):
     data = request.form
+    print(request.form, "form")
+    zd_echo = request.args.get('zd_echo')
+    if zd_echo:
+        return zd_echo
     event = data.get("event")
+    print(event)
+    call_start = data.get("call_start")
     pbx_call_id = data.get("pbx_call_id")
+    destination_number = data.get("destination")
+    call_type = data.get("calltype")
+    status_code = data.get("status_code")
+    is_recorded = data.get("is_recorded")
+    disposition = data.get("disposition")
+    call_id_with_rec = data.get("call_id_with_rec")
+    duration = data.get("duration")
 
-    if event == "NOTIFY_ANSWER":
-        call_record, _ = await CallRecord.objects.aget_or_create(pbx_call_id=pbx_call_id)
+    if event in ["NOTIFY_OUT_START", "NOTIFY_START"]:
+        call_record, _ = CallRecord.objects.get_or_create(
+            pbx_call_id=pbx_call_id)
+        call_record.call_start_time = call_start
+        call_record.caller_phone = data.get("caller_id")
+        call_record.caller_id = data.get("internal")
+        call_record.client_number = data.get("caller_id")
+        call_record.operator_number = data.get("called_did")
+        call_record.destination_number = destination_number
+        call_record.call_type = call_type
+        await add_event(call_record, event)
+        call_record.save()
+
+    elif event == "NOTIFY_INTERNAL":
+        call_record, _ = CallRecord.objects.get_or_create(
+            pbx_call_id=pbx_call_id
+        )
+        call_record.call_start = call_start
+        call_record.caller_phone = data.get("caller_id")
+        call_record.client_number = data.get("called_id")
+        call_record.operator_number = data.get("caller_did")
+        await add_event(call_record, event)
+        call_record.save()
+
+    elif event == "NOTIFY_ANSWER":
+        call_record, _ = (CallRecord.objects.get_or_create(pbx_call_id=pbx_call_id))
         call_record.caller_id = data.get("caller_id")
         call_record.client_number = data.get("caller_id")
+        call_record.operator_number = destination_number
+        call_record.call_type = call_type
         await add_event(call_record, event)
+        call_record.save()
 
-    # Handle other events similarly...
+    elif event in ["NOTIFY_OUT_END", "NOTIFY_END"]:
+        call_record, _ = CallRecord.objects.get_or_create(pbx_call_id=pbx_call_id)
+        call_record.duration = duration
+        call_record.status_code = status_code
+        call_record.is_recorded = is_recorded
+        call_record.disposition = disposition
+        call_record.call_id_with_rec = call_id_with_rec
+        call_record.client_number = data.get("caller_id")
+        call_record.operator_number = data.get("called_did")
+        call_record.call_end_time = datetime.now()
+        await add_event(call_record, event)
+        call_record.save()
+
+    elif event == "NOTIFY_RECORD":
+        zadarma_api = ZadarmaAPI(key=os.getenv("ZADARMA_KEY"), secret=os.getenv("ZADARMA_SECRET"))
+        call = zadarma_api.call('/v1/pbx/record/request/', {
+            "pbx_call_id": pbx_call_id,
+            "lifetime": 5184000
+        })
+
+        call_record, _ = CallRecord.objects.get_or_create(pbx_call_id=pbx_call_id)
+
+        call_record.caller_record_link = loads(call)["links"][0]
+        await add_event(call_record, event)
+        call_record.save()
 
     return json({})
 
